@@ -1,16 +1,7 @@
-import requests
 import telebot
-import json
-
-TKN = "5388159569:AAF5bJz9T5kB48Ayc6FaHrgmbMTKMrEbM2E" # пароль от бота
+from config import TKN, keys, headers, payload
+from extensions import APIException, AskAPI
 bot = telebot.TeleBot(TKN) # создаем объект бот
-
-payload = {}
-headers= {"apikey": "x55pb7FGx7mik2l9c0NlNVVOa4tP6egV"}
-
-keys = {'евро':'EUR',
-        'доллар':'USD',
-        'рубль':'RUB'}
 
 # сообщения-команды '/start' или '/help'
 @bot.message_handler(commands=['start', 'help'])
@@ -25,7 +16,7 @@ def start_help(message):
 # сообщения-команды '/values'
 @bot.message_handler(commands=['values'])
 def values(message):
-    text = 'Доступные валюты:'
+    text = 'Вводите названия корректно!\nДоступные валюты:'
     for key in keys.keys():
         text = '\n'.join((text,key))
     bot.reply_to(message, text)
@@ -33,25 +24,20 @@ def values(message):
 # фильтр содержимого в сообщении, на которое сработает функция ниже (по умолчанию реагирует на текст)
 @bot.message_handler()
 def convert(message):
-    from_w, to_w, amount = message.text.split()
-    r = requests.request("GET",
-                        url = f"https://api.apilayer.com/exchangerates_data/convert?to={keys[to_w]}&from={keys[from_w]}&amount={amount}",
-                        headers=headers,
-                        data = payload)
-    text = json.loads(r.content)['result']
-    bot.send_message(message.chat.id, f'{amount} {keys[from_w]} = {float(text):.2f} {keys[to_w]}')
+    try:
+        vals = message.text.split()
 
-# реагирует на фото
-@bot.message_handler(content_types=['photo'])
-def handler_photo(message):
-    pass
-    #bot.send_photo(chat_id=message.chat.id, photo=['photo'])
-    #bot.reply_to(message, "Nice meme XDD")
-    #bot.send_message(message.chat.id, "конец функционала")
+        if len(vals) != 3:
+            raise APIException('Убедись в правильности введенных параметров')
 
-# Обрабатывается все документы и аудиозаписи
-@bot.message_handler(content_types=['document', 'audio'])
-def handle_docs_audio(message):
-    pass
+        base, quote, amount = vals
+        result = AskAPI.get_price(base, quote, amount)
+    except APIException as e:
+        bot.reply_to(message, f'Пользователь ошибся:\n{e}')
+    except Exception as e:
+        bot.reply_to(message,f'Не могу обработать команду: {e}')
+    else:
+        text = f'{amount} {keys[base]} = {result:.2f} {keys[quote]}'
+        bot.send_message(message.chat.id, text)
 
 bot.polling(none_stop=True) # запуск бота. нон стоп значит что бот должен стараться работать при ошибках
